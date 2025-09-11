@@ -1,0 +1,21 @@
+# env & compiled
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.streamlit/secrets.toml
+.vscode/
+.idea/
+.pytest_cache/
+*.log
+
+# data & artifacts
+db/
+data/
+Bronze/
+Silver/
+logs/
+target/
+*.duckdb
+*.gpickle

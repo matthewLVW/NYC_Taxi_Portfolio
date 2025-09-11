@@ -1,0 +1,8 @@
+duckdb>=0.10.0,<2
+dbt-core>=1.7,<2
+dbt-duckdb>=1.7,<2
+polars>=1.0,<2
+pandas>=2.2,<3
+pyarrow>=14,<18
+streamlit>=1.31,<2
+altair>=4,<6

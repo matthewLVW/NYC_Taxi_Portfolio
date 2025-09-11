@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: silver
+    description: "Silver layer Parquet outputs written by Polars. Read directly as external files."
+    meta:
+      # pattern: put table name into 'silver.{name}.parquet'
+      external_location: "read_parquet('data/silver/silver.{name}.parquet')"
+      formatter: newstyle
+    tables:
+      - name: trips_clean
+        description: "Clean trips (includes fare mismatches)."
+      - name: trips_fare_miss
+        description: "Subset of clean with fare mismatch flag."
+      - name: trips_admin
+        description: "Administrative/adjustment rows."
+      - name: trips_anomalies
+        description: "Operational anomalies (distance/speed/window)."

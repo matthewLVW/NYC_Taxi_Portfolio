@@ -1,0 +1,7 @@
+nyc_taxi_duckdb:
+  outputs:
+    local:
+      type: duckdb
+      path: db/warehouse.duckdb
+      threads: 4
+  target: local

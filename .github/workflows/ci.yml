@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set DBT_PROFILES_DIR
+        run: echo "DBT_PROFILES_DIR=${{ github.workspace }}/dbt" >> $GITHUB_ENV
+
+      - name: dbt parse
+        run: dbt parse
+
+      - name: dbt compile
+        run: dbt compile
+
+      - name: Create sample raw Parquet
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime, timedelta
+          import polars as pl
+
+          os.makedirs('data/raw', exist_ok=True)
+
+          def row(ts, dur_min, dist, fare, tip=0.0, extra=0.0, mta=0.5, tolls=0.0, impr=0.3, cong=2.5, airport=0.0, cbd=0.0,
+                  vendor=1, pu=100, do=200, rate=1, pay=1, sflag='N'):
+              t0 = datetime.fromisoformat(ts)
+              t1 = t0 + timedelta(minutes=dur_min)
+              total = fare + tip + extra + mta + tolls + impr + cong + airport + cbd
+              return {
+                  'tpep_pickup_datetime': t0.strftime('%Y-%m-%d %H:%M:%S'),
+                  'tpep_dropoff_datetime': t1.strftime('%Y-%m-%d %H:%M:%S'),
+                  'VendorID': vendor,
+                  'PULocationID': pu,
+                  'DOLocationID': do,
+                  'payment_type': pay,
+                  'passenger_count': 1,
+                  'trip_distance': float(dist),
+                  'fare_amount': float(fare),
+                  'extra': float(extra),
+                  'mta_tax': float(mta),
+                  'tip_amount': float(tip),
+                  'tolls_amount': float(tolls),
+                  'improvement_surcharge': float(impr),
+                  'congestion_surcharge': float(cong),
+                  'airport_fee': float(airport),
+                  'cbd_congestion_fee': float(cbd),
+                  'total_amount': float(total),
+                  'RatecodeID': rate,
+                  'store_and_fwd_flag': sflag,
+              }
+
+          rows = [
+              row('2024-01-05 08:00:00', 15, 3.2, 12.5, tip=3.0),
+              row('2024-01-06 12:00:00',  8, 1.1,  7.0, tip=1.5, cong=0.0),
+              row('2024-01-20 18:00:00', 30, 5.0, 18.0, tip=4.0, tolls=2.0),
+          ]
+          pl.DataFrame(rows).write_parquet('data/raw/yellow_tripdata_2024-01.parquet')
+          print('Wrote sample raw file with', len(rows), 'rows')
+          PY
+
+      - name: Build Bronze
+        run: python scripts/bronze_build.py --raw-dir data/raw --out data/bronze/bronze_trips.parquet
+
+      - name: Build Silver
+        run: python scripts/silver_split.py --bronze data/bronze/bronze_trips.parquet --outdir data/silver
+
+      - name: dbt seed + run
+        run: |
+          dbt seed
+          dbt run
+
+      - name: Bridge schemas for app queries
+        run: |
+          python - <<'PY'
+          import duckdb
+          con = duckdb.connect('db/warehouse.duckdb')
+          con.execute('CREATE SCHEMA IF NOT EXISTS main_marts;')
+          con.execute('CREATE SCHEMA IF NOT EXISTS main_gold;')
+          con.execute('CREATE SCHEMA IF NOT EXISTS main_main_gold;')
+          marts = [
+              'mart_kpi_daily', 'mart_payment_mix_daily', 'mart_vendor_scorecard_monthly',
+              'mart_od_matrix_monthly', 'mart_adjustments_daily_zone', 'mart_airport_daily',
+              'mart_anomaly_summary_daily', 'mart_congestion_impact_daily', 'mart_revenue_daily_zone',
+              'mart_trips_hourly_vendor'
+          ]
+          for t in marts:
+              con.execute(f'CREATE OR REPLACE VIEW main_marts.{t} AS SELECT * FROM marts.{t}')
+          gold_views = ['fact_trips','fact_revenue_adjustments','dim_vendor','dim_payment','dim_zone','dim_date']
+          for t in gold_views:
+              # create passthroughs in main_gold
+              src_schema = 'main_gold' if t == 'dim_date' else 'gold'
+              con.execute(f'CREATE OR REPLACE VIEW main_gold.{t} AS SELECT * FROM {src_schema}.{t}')
+          # odd reference used in app for dim_date
+          con.execute('CREATE OR REPLACE VIEW main_main_gold.dim_date AS SELECT * FROM main_gold.dim_date')
+          con.close()
+          PY
+
+      - name: Streamlit smoke test
+        env:
+          STREAMLIT_BROWSER_GATHER_USAGE_STATS: 'false'
+        run: |
+          bash -euxo pipefail -c '
+            streamlit run app/execdashboard.py --server.headless true --server.port 8501 &
+            PID=$!
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost:8501/ >/dev/null; then echo "Streamlit up"; break; fi
+              sleep 1
+            done
+            curl -fsS http://localhost:8501/ | head -n 20
+            kill $PID || true
+          '
