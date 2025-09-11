@@ -26,6 +26,9 @@ jobs:
       - name: Set DBT_PROFILES_DIR
         run: echo "DBT_PROFILES_DIR=${{ github.workspace }}/dbt" >> $GITHUB_ENV
 
+      - name: Prepare DuckDB path
+        run: mkdir -p db
+
       - name: dbt parse
         run: dbt parse
 
