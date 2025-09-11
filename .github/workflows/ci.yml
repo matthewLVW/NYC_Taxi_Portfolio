@@ -95,6 +95,25 @@ jobs:
           dbt seed
           dbt run
 
+      - name: Validate data for app
+        run: |
+          python - <<'PY'
+          import duckdb, sys
+          con = duckdb.connect('db/warehouse.duckdb', read_only=True)
+          def check(sql, min_rows=1):
+              try:
+                  n = con.execute(sql).fetchone()[0]
+                  print(sql, '->', n)
+                  assert n >= min_rows, f'Expected >= {min_rows} rows for: {sql}'
+              except Exception as e:
+                  print('Validation failed:', e)
+                  sys.exit(1)
+          check('SELECT COUNT(*) FROM marts.mart_kpi_daily')
+          check('SELECT COUNT(*) FROM gold.fact_trips')
+          check('SELECT COUNT(*) FROM main_gold.dim_date')
+          con.close()
+          PY
+
       - name: Bridge schemas for app queries
         run: |
           python - <<'PY'
