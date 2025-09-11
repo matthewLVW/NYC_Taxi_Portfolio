@@ -87,6 +87,9 @@ jobs:
       - name: Build Silver
         run: python scripts/silver_split.py --bronze data/bronze/bronze_trips.parquet --outdir data/silver
 
+      - name: dbt deps
+        run: dbt deps
+
       - name: dbt seed + run
         run: |
           dbt seed
@@ -95,11 +98,22 @@ jobs:
       - name: Bridge schemas for app queries
         run: |
           python - <<'PY'
-          import duckdb
+          import duckdb, sys
           con = duckdb.connect('db/warehouse.duckdb')
           con.execute('CREATE SCHEMA IF NOT EXISTS main_marts;')
           con.execute('CREATE SCHEMA IF NOT EXISTS main_gold;')
           con.execute('CREATE SCHEMA IF NOT EXISTS main_main_gold;')
+
+          def exists(schema: str, name: str) -> bool:
+              q = """
+              SELECT 1
+              FROM information_schema.tables
+              WHERE lower(table_schema)=? AND lower(table_name)=?
+              LIMIT 1
+              """
+              return con.execute(q, [schema.lower(), name.lower()]).fetchone() is not None
+
+          # Bridge marts.* -> main_marts.* when present
           marts = [
               'mart_kpi_daily', 'mart_payment_mix_daily', 'mart_vendor_scorecard_monthly',
               'mart_od_matrix_monthly', 'mart_adjustments_daily_zone', 'mart_airport_daily',
@@ -107,14 +121,30 @@ jobs:
               'mart_trips_hourly_vendor'
           ]
           for t in marts:
-              con.execute(f'CREATE OR REPLACE VIEW main_marts.{t} AS SELECT * FROM marts.{t}')
-          gold_views = ['fact_trips','fact_revenue_adjustments','dim_vendor','dim_payment','dim_zone','dim_date']
+              if exists('marts', t):
+                  con.execute(f'CREATE OR REPLACE VIEW main_marts.{t} AS SELECT * FROM marts.{t}')
+              else:
+                  print(f"[bridge] skip: marts.{t} does not exist")
+
+          # Bridge gold -> main_gold; dim_date may live in main_gold already
+          gold_views = ['fact_trips','fact_revenue_adjustments','dim_vendor','dim_payment','dim_zone']
           for t in gold_views:
-              # create passthroughs in main_gold
-              src_schema = 'main_gold' if t == 'dim_date' else 'gold'
-              con.execute(f'CREATE OR REPLACE VIEW main_gold.{t} AS SELECT * FROM {src_schema}.{t}')
+              if exists('gold', t):
+                  con.execute(f'CREATE OR REPLACE VIEW main_gold.{t} AS SELECT * FROM gold.{t}')
+              else:
+                  print(f"[bridge] skip: gold.{t} does not exist")
+
+          # dim_date special-case: produced in schema main_gold per model config
+          if exists('main_gold', 'dim_date'):
+              pass
+          elif exists('gold', 'dim_date'):
+              con.execute('CREATE OR REPLACE VIEW main_gold.dim_date AS SELECT * FROM gold.dim_date')
+          else:
+              print('[bridge] skip: dim_date not found in gold or main_gold')
+
           # odd reference used in app for dim_date
-          con.execute('CREATE OR REPLACE VIEW main_main_gold.dim_date AS SELECT * FROM main_gold.dim_date')
+          if exists('main_gold', 'dim_date'):
+              con.execute('CREATE OR REPLACE VIEW main_main_gold.dim_date AS SELECT * FROM main_gold.dim_date')
           con.close()
           PY
 
