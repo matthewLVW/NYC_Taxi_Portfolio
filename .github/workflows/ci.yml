@@ -160,7 +160,7 @@ jobs:
           try:
               check('SELECT COUNT(*) FROM main_marts.mart_kpi_daily')
               check('SELECT COUNT(*) FROM main_gold.fact_trips')
-              check('SELECT COUNT(*) FROM main_gold.dim_date')
+              check('SELECT COUNT(*) FROM main_main_gold.dim_date')
           except Exception as e:
               print('Validation failed:', e)
               sys.exit(1)
