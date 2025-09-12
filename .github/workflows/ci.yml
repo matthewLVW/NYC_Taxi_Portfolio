@@ -193,14 +193,25 @@ jobs:
 
           url = "http://localhost:8501"
 
+          def ensure_sidebar_open(page):
+              # Click the sidebar opener if present
+              try:
+                  btn = page.get_by_role("button", name="Open sidebar")
+                  if btn.count() > 0:
+                      btn.first.click()
+                      time.sleep(0.5)
+              except Exception:
+                  pass
+
           def set_window_30d(page):
-              # Open the only combobox and choose Last 30 Days
-              page.get_by_role("combobox").click()
+              # Open the only combobox in the sidebar and choose Last 30 Days
+              page.get_by_role("combobox").first.click()
               page.get_by_text("Last 30 Days", exact=True).click()
               time.sleep(0.8)
 
-          def go_radio(page, name):
-              page.get_by_role("radio", name=name).click()
+          def click_sidebar_label(page, text):
+              # Click by visible text label, more reliable than the hidden input
+              page.get_by_text(text, exact=True).first.click()
               time.sleep(1.2)
 
           with sync_playwright() as p:
@@ -208,19 +219,20 @@ jobs:
               page = browser.new_page(viewport={"width": 1440, "height": 900})
               page.goto(url, wait_until="domcontentloaded", timeout=120_000)
 
-              # Company Pulse
+              ensure_sidebar_open(page)
+
+              # Company Pulse (default page); just set window and screenshot
               set_window_30d(page)
-              go_radio(page, "Company Pulse")
               page.wait_for_selector("text=Company Pulse", timeout=120_000)
               page.screenshot(path="streamlit_company_pulse.png", full_page=True)
 
               # Strategic Levers
-              go_radio(page, "Strategic Levers")
+              click_sidebar_label(page, "Strategic Levers")
               page.wait_for_selector("text=Strategic Levers", timeout=120_000)
               page.screenshot(path="streamlit_strategic_levers.png", full_page=True)
 
               # Zone Heat
-              go_radio(page, "Zone Heat")
+              click_sidebar_label(page, "Zone Heat")
               page.wait_for_selector("text=Zone Heat", timeout=120_000)
               page.screenshot(path="streamlit_zone_heat.png", full_page=True)
 
