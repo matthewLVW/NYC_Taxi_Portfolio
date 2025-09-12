@@ -180,6 +180,7 @@ jobs:
           STREAMLIT_BROWSER_GATHER_USAGE_STATS: 'false'
         run: |
           set -euxo pipefail
+          mkdir -p DatabaseAndDashboardSmoketest
           # Start Streamlit
           streamlit run app/execdashboard.py --server.headless true --server.port 8501 &
           PID=$!
@@ -232,17 +233,17 @@ jobs:
               # Company Pulse (default page); just set window and screenshot
               set_window_30d(page)
               page.wait_for_selector("text=Company Pulse", timeout=120_000)
-              page.screenshot(path="streamlit_company_pulse.png", full_page=True)
+              page.screenshot(path="DatabaseAndDashboardSmoketest/streamlit_company_pulse.png", full_page=True)
 
               # Strategic Levers
               click_sidebar_label(page, "Strategic Levers")
               page.wait_for_selector("text=Strategic Levers", timeout=120_000)
-              page.screenshot(path="streamlit_strategic_levers.png", full_page=True)
+              page.screenshot(path="DatabaseAndDashboardSmoketest/streamlit_strategic_levers.png", full_page=True)
 
               # Zone Heat
               click_sidebar_label(page, "Zone Heat")
               page.wait_for_selector("text=Zone Heat", timeout=120_000)
-              page.screenshot(path="streamlit_zone_heat.png", full_page=True)
+              page.screenshot(path="DatabaseAndDashboardSmoketest/streamlit_zone_heat.png", full_page=True)
 
               browser.close()
           PY
@@ -252,8 +253,5 @@ jobs:
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: streamlit-screenshots
-          path: |
-            streamlit_company_pulse.png
-            streamlit_strategic_levers.png
-            streamlit_zone_heat.png
+          name: DatabaseAndDashboardSmoketest
+          path: DatabaseAndDashboardSmoketest
