@@ -176,58 +176,58 @@ jobs:
         env:
           STREAMLIT_BROWSER_GATHER_USAGE_STATS: 'false'
         run: |
-          bash -euxo pipefail -c '
-            # Start Streamlit
-            streamlit run app/execdashboard.py --server.headless true --server.port 8501 &
-            PID=$!
-            # Wait for server
-            for i in $(seq 1 60); do
-              if curl -fsS http://localhost:8501/ >/dev/null; then echo "Streamlit up"; break; fi
-              sleep 1
-            done
+          set -euxo pipefail
+          # Start Streamlit
+          streamlit run app/execdashboard.py --server.headless true --server.port 8501 &
+          PID=$!
+          # Wait for server
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8501/ >/dev/null; then echo "Streamlit up"; break; fi
+            sleep 1
+          done
 
-            # Drive UI via Playwright and take screenshots
-            python - <<"PY"
-            from playwright.sync_api import sync_playwright
-            import time
+          # Drive UI via Playwright and take screenshots
+          python - <<'PY'
+          from playwright.sync_api import sync_playwright
+          import time
 
-            url = "http://localhost:8501"
+          url = "http://localhost:8501"
 
-            def set_window_30d(page):
-                # Open the only combobox and choose Last 30 Days
-                # Works with Streamlit's selectbox
-                page.get_by_role("combobox").click()
-                # Click the option by visible text
-                page.get_by_text("Last 30 Days", exact=True).click()
-                time.sleep(0.5)
+          def set_window_30d(page):
+              # Open the only combobox and choose Last 30 Days
+              page.get_by_role("combobox").click()
+              page.get_by_text("Last 30 Days", exact=True).click()
+              time.sleep(0.8)
 
-            def go_radio(page, name):
-                page.get_by_role("radio", name=name).click()
-                time.sleep(0.8)
+          def go_radio(page, name):
+              page.get_by_role("radio", name=name).click()
+              time.sleep(1.2)
 
-            with sync_playwright() as p:
-                browser = p.chromium.launch()
-                page = browser.new_page(viewport={"width": 1440, "height": 900})
-                page.goto(url, wait_until="domcontentloaded", timeout=120_000)
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page(viewport={"width": 1440, "height": 900})
+              page.goto(url, wait_until="domcontentloaded", timeout=120_000)
 
-                # Company Pulse
-                set_window_30d(page)
-                go_radio(page, "Company Pulse")
-                page.screenshot(path="streamlit_company_pulse.png", full_page=True)
+              # Company Pulse
+              set_window_30d(page)
+              go_radio(page, "Company Pulse")
+              page.wait_for_selector("text=Company Pulse", timeout=120_000)
+              page.screenshot(path="streamlit_company_pulse.png", full_page=True)
 
-                # Strategic Levers
-                go_radio(page, "Strategic Levers")
-                page.screenshot(path="streamlit_strategic_levers.png", full_page=True)
+              # Strategic Levers
+              go_radio(page, "Strategic Levers")
+              page.wait_for_selector("text=Strategic Levers", timeout=120_000)
+              page.screenshot(path="streamlit_strategic_levers.png", full_page=True)
 
-                # Zone Heat
-                go_radio(page, "Zone Heat")
-                page.screenshot(path="streamlit_zone_heat.png", full_page=True)
+              # Zone Heat
+              go_radio(page, "Zone Heat")
+              page.wait_for_selector("text=Zone Heat", timeout=120_000)
+              page.screenshot(path="streamlit_zone_heat.png", full_page=True)
 
-                browser.close()
-            PY
+              browser.close()
+          PY
 
-            kill $PID || true
-          '
+          kill $PID || true
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
