@@ -167,17 +167,73 @@ jobs:
           con.close()
           PY
 
-      - name: Streamlit smoke test
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Streamlit UI screenshots (all pages, 30 days)
         env:
           STREAMLIT_BROWSER_GATHER_USAGE_STATS: 'false'
         run: |
           bash -euxo pipefail -c '
+            # Start Streamlit
             streamlit run app/execdashboard.py --server.headless true --server.port 8501 &
             PID=$!
-            for i in $(seq 1 30); do
+            # Wait for server
+            for i in $(seq 1 60); do
               if curl -fsS http://localhost:8501/ >/dev/null; then echo "Streamlit up"; break; fi
               sleep 1
             done
-            curl -fsS http://localhost:8501/ | head -n 20
+
+            # Drive UI via Playwright and take screenshots
+            python - <<"PY"
+            from playwright.sync_api import sync_playwright
+            import time
+
+            url = "http://localhost:8501"
+
+            def set_window_30d(page):
+                # Open the only combobox and choose Last 30 Days
+                # Works with Streamlit's selectbox
+                page.get_by_role("combobox").click()
+                # Click the option by visible text
+                page.get_by_text("Last 30 Days", exact=True).click()
+                time.sleep(0.5)
+
+            def go_radio(page, name):
+                page.get_by_role("radio", name=name).click()
+                time.sleep(0.8)
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.goto(url, wait_until="domcontentloaded", timeout=120_000)
+
+                # Company Pulse
+                set_window_30d(page)
+                go_radio(page, "Company Pulse")
+                page.screenshot(path="streamlit_company_pulse.png", full_page=True)
+
+                # Strategic Levers
+                go_radio(page, "Strategic Levers")
+                page.screenshot(path="streamlit_strategic_levers.png", full_page=True)
+
+                # Zone Heat
+                go_radio(page, "Zone Heat")
+                page.screenshot(path="streamlit_zone_heat.png", full_page=True)
+
+                browser.close()
+            PY
+
             kill $PID || true
           '
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: streamlit-screenshots
+          path: |
+            streamlit_company_pulse.png
+            streamlit_strategic_levers.png
+            streamlit_zone_heat.png
