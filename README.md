@@ -39,8 +39,11 @@ $env:DBT_PROFILES_DIR = (Resolve-Path "dbt").Path
 # bash/zsh
 export DBT_PROFILES_DIR="$(pwd)/dbt"
 
-# 3) Place TLC Parquet(s) into data/raw/
-#    e.g., yellow_tripdata_2024-01.parquet
+# 3) Get TLC Parquet(s) into data/raw/
+# Option A: use the helper downloader (defaults: yellow, 2024-01..2025-04)
+python scripts/read_raw_by_month.py --raw-dir data/raw
+# Option B: manually place files into data/raw/
+#   e.g., yellow_tripdata_2024-01.parquet
 
 # 4) Build Bronze and Silver
 python scripts/bronze_build.py --raw-dir data/raw --out data/bronze/bronze_trips.parquet
