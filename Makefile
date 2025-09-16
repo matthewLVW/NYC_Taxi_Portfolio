@@ -8,9 +8,9 @@ DBT=$(VENV)/bin/dbt
 
 # Windows fallback
 ifeq ($(OS),Windows_NT)
-PY=$(VENV)/Scripts/python.exe
-PIP=$(VENV)/Scripts/pip.exe
-DBT=$(VENV)/Scripts/dbt.exe
+PY=$(VENV)\\Scripts\\python.exe
+PIP=$(VENV)\\Scripts\\pip.exe
+DBT=$(VENV)\\Scripts\\dbt.exe
 endif
 
 ###########################
@@ -36,7 +36,7 @@ silver:
 	$(PY) scripts/silver_split.py --bronze data/bronze/bronze_trips.parquet --outdir data/silver
 
 gold:
-	$(DBT) deps || true
+	-$(DBT) deps
 	$(DBT) seed
 	$(DBT) run
 	$(DBT) test
